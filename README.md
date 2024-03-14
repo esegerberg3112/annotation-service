@@ -5,7 +5,7 @@ Overall Architecture:
 
 <img width="750" alt="Screenshot 2024-03-14 at 1 12 42 PM" src="https://github.com/esegerberg3112/annotation-service/assets/61920056/33bdf237-2c94-40b1-9003-21a260cfaaab">
 
-AWS Cloud Features Used:  
+AWS Cloud Features Leveraged:  
 1. ELB / ASG - leveraged launch templates and ELB's to setup dynamic auto-scaling for the web and annotator services
 2. EC2 - for hosting servers, with 3 separate types for the web instance, annotator, and utility services
 3. S3 - for storage of user uploaded files and annotation results
@@ -16,7 +16,7 @@ AWS Cloud Features Used:
 
 Technology Stack:
 
-HTML/JS/CSS
-Python
-PostgreSQL
-DynamoDB
+HTML/JS/CSS  
+Python  
+PostgreSQL  
+DynamoDB  
