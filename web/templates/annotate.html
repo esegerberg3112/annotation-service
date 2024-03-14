@@ -1,0 +1,83 @@
+<!--
+annotate.html - Direct upload to Amazon S3 using signed POST request
+Copyright (C) 2011-2020 Vas Vasiliadis <vas@uchicago.edu>
+University of Chicago
+-->
+
+{% extends "base.html" %}
+
+{% block title %}Annotate{% endblock %}
+
+{% block body %}
+
+  {% include "header.html" %}
+
+  <div class="container">
+    
+    <div class="page-header">
+      <h1>Annotate VCF File</h1>
+    </div>
+
+  	<div class="form-wrapper">
+      <form role="form" action="{{ s3_post.url }}" method="post" enctype="multipart/form-data">
+        {% for key, value in s3_post.fields.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}" />
+        {% endfor %}
+
+        <div class="row">
+          <div class="form-group col-md-6">
+            <label for="upload">Select VCF Input File</label>
+            <div class="input-group col-md-12">
+              <span class="input-group-btn">
+                <span class="btn btn-default btn-file btn-lg">Browse&hellip; <input type="file" id="upload_file" name="file" /></span>
+              </span>
+              <input type="text" class="form-control col-md-6 input-lg" readonly />
+            </div>
+          </div>
+        </div>
+
+        <br />
+  			<div class="form-actions">
+  				<input class="btn btn-lg btn-primary" type="submit" value="Annotate"/>
+  			</div>
+      </form>
+    </div>
+    
+  </div>
+
+  <script>
+    // helper functions to validate the input file is a .vcf, and to then upload the file
+    function validateFile(sessionRole) {
+      var fileInput = document.getElementById("upload_file");
+      var uploadedFile = fileInput.files[0];
+
+      // Check if the file size is within the desired limit (150KB) for free users
+      if (sessionRole === "free_user") {
+        var maxSizeInBytes = 150 * 1024; // 150 KB
+        if (uploadedFile.size > maxSizeInBytes) {
+          alert("Free users cannot exceed file sizes of 150 KB. Please select a smaller file, or upgrade to our Premium plan.");
+          return false;
+        }
+      }
+
+      // Check if it's a valid .vcf file
+      if (!uploadedFile.name.endsWith(".vcf")) {
+        alert("Please select a valid .vcf file.");
+        return false;
+      }
+
+      // valid file, trigger S3 upload
+      return true;
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        var form = document.querySelector("form");
+
+        form.addEventListener("submit", function(event) {
+            if (!validateFile(`{{ session['role'] }}`)) {
+                event.preventDefault(); // Prevent the form from submitting if validation fails
+            }
+        });
+    });
+  </script>
+{% endblock %}

@@ -1,0 +1,80 @@
+<!--
+annotation_details.html - Display details about a user's annotation job
+Copyright (C) 2011-2018 Vas Vasiliadis <vas@uchicago.edu>
+University of Chicago
+-->
+{% extends "base.html" %}
+{% block title %}Annotation Details{% endblock %}
+{% block body %}
+  {% include "header.html" %}
+
+  <div class="container">
+    <div class="page-header">
+      <h1>Annotation Details</h1>
+    </div>
+
+    <p>
+      <strong>Request ID:</strong> {{ annotation['job_id'] }}<br />
+      <strong>Request Time</strong>: <span class="annotation-timestamp">{{ annotation['submit_time'] }}</span><br />
+      <strong>VCF Input File</strong>: <a href="{{ download_input_file }}">{{ annotation['input_file_name'] }}</a><br />
+      <strong>Status</strong>: {{ annotation['job_status'] }}
+      {% if annotation['job_status'] == "COMPLETED" %}
+        <br /><strong>Complete Time</strong>: <span class="annotation-timestamp">{{ annotation['complete_time'] }}</span>
+        <hr />
+        <strong>Annotated Results File</strong>:
+        {% if result_is_archived %}
+          <span id="download-link">Results file is in the process of being unarchived, check back later to download...</span><br />
+        {% elif 'complete_time' in annotation %}
+          <a id="download-link" href="{{ download_result_file }}">Download</a><br />
+        {% else %}
+          <a>Results pending...</a><br />
+        {% endif %}
+        <strong>Annotation Log File</strong>: <a href="{{ url_for('annotation_log', id=annotation['job_id'])}}">View</a><br />
+      {% endif %}
+    </p>
+
+    <hr />
+    <a href="{{ url_for('annotations_list') }}">&larr; back to annotations list</a>
+
+  </div> <!-- container -->
+  <script>
+    // liten for when annotations are loaded, and convert their epoch date/time to readable format
+    document.addEventListener("DOMContentLoaded", function() {
+      var annotationTimestamps = document.querySelectorAll(".annotation-timestamp");
+  
+      annotationTimestamps.forEach(function(timestampElement) {
+        var timestampValue = parseInt(timestampElement.innerText);
+        var formattedTimestamp = new Date(timestampValue * 1000).toLocaleString('en-US', {timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone});
+        timestampElement.innerText = formattedTimestamp;
+      });
+    });
+
+    function checkResultsFileArchive() {
+      // check if user is a free user
+      if (`{{ session['role'] }}` === "free_user") {
+        console.log("Free user, checking more than 5 minutes to archive results...");
+        // check if it's been more than 5 minutes since this job was completed
+        var timestampValue = parseInt(`{{ annotation['complete_time'] }}`) * 1000;
+        var formattedTimestamp = new Date(timestampValue).getTime();
+
+        // get difference between current time and completion time for this job
+        var timeDifference = new Date().getTime() - formattedTimestamp;
+
+        // Check if the difference is greater than 5 minutes, giving small window to ensure frontend updates to ensure
+        // download is prevented right before backend archives file (stop issue of user downloading when the file is already in Glacier)
+        if (timeDifference > 4.9 * 60 * 1000) {
+          console.log('More than 5 minutes, results file has been archived.');
+          
+          // Dynamically modify the href and text if the users 5 minutes is up for downloading this file
+          document.getElementById('download-link').href = `{{ url_for('subscribe') }}`;
+          document.getElementById('download-link').innerHTML = 'upgrade to Premium for download';
+        }
+      }
+
+      // repeat check every 5 seconds
+      setTimeout(checkResultsFileArchive, 3000);
+    }
+
+    checkResultsFileArchive();
+  </script>
+{% endblock %}
