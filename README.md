@@ -1,18 +1,22 @@
-# gas-framework
-An enhanced web framework (based on [Flask](http://flask.pocoo.org/)) for use in the capstone project. Adds robust user authentication (via [Globus Auth](https://docs.globus.org/api/auth)), modular templates, and some simple styling based on [Bootstrap](http://getbootstrap.com/).
+# GAS Annotation Service  
+Capstone project. Fully functional SaaS genomics annotator that uses the AnnTools package. User can submit files for annotation, and then view and download results. There are free and premium user tiers, with premium users having permanent access to their results while free users have their results files archived to AWS Glacier after a short period of time.
 
-Directory contents are as follows:
-* `/web` - The GAS web app files
-* `/ann` - Annotator files
-* `/util` - Utility scripts for notifications, archival, and restoration
-* `/aws` - AWS user data files
+Overall Architecture:  
 
-Archive Process:  
-For archiving, I set up a SQS queue. When an annotation job finished, it would post a message to the SNS esegerberg_job_results topic with the annotation job that was just completed. The SQS queue, esegerberg_glacier_archive, listens to that SNS topic and receives a copy of the messages posted to it. This queue was set up with a delivery delay of 5 minutes. This was because, when the completed job was posted to the SNS topic, the queue would receive that message 5 minutes later. When received, it would check if the user is currently a free user using their user profile. If they were, it would begin the process of archiving the results file for the annotation job it had received the message for. If the user was a premium user at this 5 minute mark, it wouldn't archive anything and would just delete the message from the queue. This handles the case where a user submits a job as a free user, and then upgrades to premium within the 5 minutes before their file should be archived, so it isn't archived and they have access to it forever. If a file is successfully archived for free users after those 5 minutes, the archive_id is stored in the DynamoDB entry for that annotation job and their file is moved out of S3 to Glacier.
+<img width="750" alt="Screenshot 2024-03-14 at 1 12 42 PM" src="https://github.com/esegerberg3112/annotation-service/assets/61920056/33bdf237-2c94-40b1-9003-21a260cfaaab">
 
-I chose this approach, because it handled the edge case of a free user upgrading to premium while they had a job in flight quite nicely. It also decoupled the initiation of the job archiving process from the annotator's ability to generate results, and didn't require any other service to have knowledge of the 5 minute grace period before files were archived. I also chose this because it made it simple to dynamically archive results files exactly 5 minutes from when they were created, minimizing errors that could arise from trying to check the Dynamo database or S3 and determine when files should be archived based on their creation time or whatnot.
+AWS Cloud Features Used:  
+1. ELB / ASG - leveraged launch templates and ELB's to setup dynamic auto-scaling for the web and annotator services
+2. EC2 - for hosting servers, with 3 separate types for the web instance, annotator, and utility services
+3. S3 - for storage of user uploaded files and annotation results
+4. DynamoDB - storing annotation job information
+5. SNS / SQS - for async, interservice communication
+6. Lambda - for email notifications to users when jobs were finished
+7. S3 Glacier - for archiving results files, and restoring when requested, for free users
 
-Restore Process:  
-For restoring, I set up 2 SNS topics and 2 SQS queues. From the frontend, a user would click the Subscribe button to upgrade to a premium account. That would post a message to my esegerberg_restore_glacier_files SNS topic. Restore.py was set up to poll an SQS queue, esegerberg_restore_glacier_files, that subscribed to this topic. If it found a message, it would take the user_id from the message and do a DynamoDB query on that user_id. For each annotation job returned, if there was an actual value in the results_file_archive_id field, it would attempt an expedited retrieval of that archive_id from Glacier and a regular retrieval if the expedited attempt failed. If that archive_id was found, an archive job was initiated and then a message was posted to the esegerberg_glacier_retrieval SNS topic for thaw.py to listen in on. Thaw.py would poll on another SQS queue that listened to this SNS topic. If it found a message, that message would contain a jobId for a Glacier archive retrieval. Thaw.py would check on its status, and if it wasn't done, would just keep polling without deleting that message. The message would be put back into the queue after its 60 second visibility timeout, ensuring that the loop would reasonably loop through each message in the queue once before processing one twice. If the job was completed, Thaw.py would put the unarchived file into S3, delete the archive id, and then update this annotation jobs DynamoDB entry to overwrite its results_file_archive_id value with an empty string. This was so that if a user was to ever downgrade to free and upgrade to premium multiple times, Restore.py wouldn't attempt to unarchive a file that was previously unarchived. Finally, the consumed message would be deleted from the SQS queue. The frontend would then check for the presence of that annotation results file in S3. If it didn't exist, and the user was currently a premium user, the file must be in the process of being thawed and that's how we could indicate the distinction to the user on the GAS site.
+Technology Stack:
 
-I chose this architecture because it decoupled the process of initiating a Glacier archive retrieval from the actual process of checking on the status of the retrieval, allowing efficient asynchronous communication. Because Glacier could take 4-5 hours to unarchive a file, I really didn't want restore.py to have to manage any of that process. This is why I had the 2 queues, and used a higher visibility timeout on the queue that Thaw.py polled on so that messages would reliably be rotated through and checked consistently for progres on the retrieval.
+HTML/JS/CSS
+Python
+PostgreSQL
+DynamoDB
